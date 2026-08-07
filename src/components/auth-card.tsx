@@ -1,7 +1,7 @@
 import { KeyRound } from "lucide-react";
 import type { FormEvent, ReactNode } from "react";
 import { ThemeToggle } from "@/components/theme-toggle";
-import logoAsset from "@/assets/eurovirtuals-logo.png.asset.json";
+const LOGO_URL = "/eurovirtuals-logo.png";
 
 
 /** Shared chrome for the sign-in, forgot-password and reset-password screens. */
@@ -33,7 +33,7 @@ export function AuthCard({
       <div className="relative w-full max-w-sm">
         <div className="mb-6 flex flex-col items-start gap-2">
           <img
-            src={logoAsset.url}
+            src={LOGO_URL}
             alt="EuroVirtuals — built to perform"
             className="h-12 w-auto max-w-full object-contain"
           />

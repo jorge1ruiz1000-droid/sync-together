@@ -7,7 +7,7 @@ import { canAccess, isClientAdmin, useAuth, useClientScope, userLabel, userRole 
 import { API_BASE, type Dict } from "@/lib/api";
 import { cn } from "@/lib/utils";
 import { ThemeToggle } from "@/components/theme-toggle";
-import logoAsset from "@/assets/eurovirtuals-logo.png.asset.json";
+const LOGO_URL = "/eurovirtuals-logo.png";
 
 
 function NavIcon({ name, className }: { name: string; className?: string }) {
@@ -173,7 +173,7 @@ function SidebarContent({
     <aside className={className}>
       <div className="flex items-center gap-2 px-4 py-5">
         <img
-          src={logoAsset.url}
+          src={LOGO_URL}
           alt="EuroVirtuals — built to perform"
           className="h-10 w-auto min-w-0 flex-1 object-contain object-left"
         />

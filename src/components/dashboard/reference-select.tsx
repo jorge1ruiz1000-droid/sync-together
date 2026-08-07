@@ -316,10 +316,10 @@ export function MultiReferenceSelect({
   onChange: (value: string[]) => void;
   className?: string;
 }) {
-  const query = useReferenceOptions(kind);
+  const [open, setOpen] = useState(false);
+  const query = useReferenceOptions(kind, false, undefined, open || value.length > 0);
   const options = query.options;
   const selected = new Set(value);
-  const [open, setOpen] = useState(false);
   const [search, setSearch] = useState("");
   const ref = useRef<HTMLDivElement | null>(null);
 

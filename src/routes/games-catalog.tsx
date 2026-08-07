@@ -3,7 +3,7 @@ import { useQuery } from "@tanstack/react-query";
 import { useMemo, useState } from "react";
 import { DashboardShell } from "@/components/dashboard/dashboard-shell";
 import { ReferenceSelect } from "@/components/dashboard/reference-select";
-import { ApiErrorNotice } from "@/components/dashboard/api-error";
+import { ApiErrorBox } from "@/components/dashboard/api-error";
 import { apiRequest, normalizeList, type Dict } from "@/lib/api";
 import { useAuth, useClientScope } from "@/lib/use-auth";
 import { cn } from "@/lib/utils";
@@ -170,7 +170,7 @@ function GamesCatalogPage() {
           ))}
         </div>
       ) : query.error ? (
-        <ApiErrorNotice error={query.error} onRetry={() => void query.refetch()} />
+        <ApiErrorBox error={query.error} />
       ) : rows.length === 0 ? (
         <p className="rounded-lg border border-border bg-surface/60 p-6 text-sm text-muted-foreground">
           No games found for this client.

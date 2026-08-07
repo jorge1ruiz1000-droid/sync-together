@@ -69,7 +69,7 @@ export function ResourceView({ resource }: { resource: ResourceDef }) {
   }, [values]);
 
 
-  const { user } = useAuth();
+  const { user, ready } = useAuth();
   const scope = useClientScope(user);
   const rowActions = actionsFor(resource.key, "row").filter(
     (a) => roleAllowed(user, a.roles) && canAccess(user, a.permission),
@@ -118,7 +118,13 @@ export function ResourceView({ resource }: { resource: ResourceDef }) {
     .map((filter) => filter.label);
 
   const query = useMemo(() => {
-    const params: Record<string, QueryValue> = { ...applied };
+    const params: Record<string, QueryValue> = {};
+    // Empty filters are dropped so the query key stays stable and we don't
+    // refetch just because a blank input changed shape.
+    for (const [key, value] of Object.entries(applied)) {
+      if (value === "" || value === null || value === undefined) continue;
+      params[key] = value;
+    }
     if (singleClient) delete params.operator_id;
     if (resource.paginated) {
       params.page = page;
@@ -130,7 +136,9 @@ export function ResourceView({ resource }: { resource: ResourceDef }) {
 
   const request = useQuery({
     queryKey: [resource.key, query],
-    enabled: missingRequired.length === 0,
+    // Wait for the cached session: firing before it resolves would run once
+    // unscoped and again with the client scope applied.
+    enabled: ready && missingRequired.length === 0,
     queryFn: () => apiRequest(resource.path, { query }),
     retry: false,
   });

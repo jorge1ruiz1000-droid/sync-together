@@ -1,24 +1,207 @@
 import { createFileRoute } from "@tanstack/react-router";
+import { useQuery } from "@tanstack/react-query";
+import { useEffect } from "react";
+import { apiRequest, type Dict } from "@/lib/api";
+import { useAuth, useClientScope } from "@/lib/use-auth";
+import { DashboardShell } from "@/components/dashboard/dashboard-shell";
+import { StatCard } from "@/components/dashboard/stat-card";
+import { StatsExplorer } from "@/components/dashboard/stats-explorer";
+import { ReferenceSelect } from "@/components/dashboard/reference-select";
+import { DateRangeField } from "@/components/ui/date-range-field";
+import { formatStatValue, humanizeKey, todayISO } from "@/lib/format";
+import { parseOperatorId, useDashboardStore } from "@/lib/stores/dashboard-store";
 
-// No head() here: the home route inherits title/description/og/twitter from
-// __root.tsx, and ships no og:image so serve-time hosting can inject the
-// project's social preview (explicit og:image or latest screenshot).
+
 export const Route = createFileRoute("/")({
-  component: Index,
+  head: () => ({
+    meta: [
+      { title: "BetKraft Backoffice · Operations dashboard" },
+      {
+        name: "description",
+        content:
+          "Live operations dashboard for the EuroVirtuals backoffice API: GGR, stakes, players, bets, promotions and audit activity in one control room.",
+      },
+      { property: "og:title", content: "BetKraft Backoffice · Operations dashboard" },
+      {
+        property: "og:description",
+        content: "GGR, stake, player and bet analytics plus promotions and audit tooling for EuroVirtuals operators.",
+      },
+      { property: "og:type", content: "website" },
+      { name: "twitter:card", content: "summary_large_image" },
+    ],
+  }),
+  component: Overview,
 });
 
-// IMPORTANT: Replace this placeholder. See ./README.md for routing conventions.
-function Index() {
+const METRIC_CARDS: { key: string; label: string; icon: string; tone: "primary" | "accent" | "warning" | "default" }[] = [
+  { key: "ggr", label: "GGR", icon: "TrendingUp", tone: "primary" },
+  { key: "total_stake", label: "Total stake", icon: "Coins", tone: "accent" },
+  { key: "total_bets", label: "Total bets", icon: "Dices", tone: "default" },
+  { key: "players", label: "Players", icon: "Users", tone: "default" },
+  { key: "total_won", label: "Total won", icon: "Trophy", tone: "warning" },
+  { key: "total_voided", label: "Total voided", icon: "Ticket", tone: "default" },
+];
+
+function findMetric(payload: unknown, key: string): number | null {
+  const seek = (value: unknown, depth: number): number | null => {
+    if (!value || typeof value !== "object" || depth < 0) return null;
+    const dict = value as Dict;
+    const direct = dict[key];
+    if (typeof direct === "number") return direct;
+    if (typeof direct === "string" && direct !== "" && !Number.isNaN(Number(direct))) return Number(direct);
+    for (const nested of Object.values(dict)) {
+      const found = seek(nested, depth - 1);
+      if (found !== null) return found;
+    }
+    return null;
+  };
+  return seek(payload, 5);
+}
+
+function Overview() {
+  const {
+    dateFrom,
+    dateTo,
+    operatorId,
+    partnerId,
+    gameId,
+    setOperatorId,
+    setPartnerId,
+    setGameId,
+    setRange,
+  } = useDashboardStore();
+  const { user } = useAuth();
+  const scope = useClientScope(user);
+  const lockOperator = scope.mode === "single" && !!scope.operatorId;
+  // Single-client admins never choose an operator — it comes from their account.
+  const hideOperator = scope.mode === "single";
+  // Partner grouping is platform-wide — hidden from client admins.
+  const hidePartner = scope.clientAdmin;
+
+  useEffect(() => {
+    if (lockOperator && operatorId !== scope.operatorId) setOperatorId(scope.operatorId as string);
+  }, [lockOperator, scope.operatorId, operatorId, setOperatorId]);
+
+  const operatorIdNum = parseOperatorId(operatorId);
+  const partnerIdNum = hidePartner ? undefined : parseOperatorId(partnerId);
+  const gameIdNum = parseOperatorId(gameId);
+
+  const summary = useQuery({
+    queryKey: ["stats-summary", dateFrom, dateTo, operatorIdNum, partnerIdNum, gameIdNum],
+    retry: false,
+    queryFn: () =>
+      apiRequest("/api/v1/stats/summary", {
+        query: {
+          date_from: dateFrom,
+          date_to: dateTo,
+          operator_id: operatorIdNum,
+          partner_id: partnerIdNum,
+          game_id: gameIdNum,
+        },
+      }),
+  });
+
+  const summaryError = summary.error ? (summary.error as Error).message : null;
+
   return (
-    <div
-      className="flex min-h-screen items-center justify-center"
-      style={{ backgroundColor: "#fcfbf8" }}
+    <DashboardShell
+      title="Operations overview"
+      subtitle="Platform summary, top performers and recent activity"
     >
-      <img
-        data-lovable-blank-page-placeholder="REMOVE_THIS"
-        src="https://cdn.gpteng.co/blank-app-v1.svg"
-        alt="Your app will live here!"
-      />
-    </div>
+      <div className="panel mb-5 space-y-4 p-4">
+        <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-6">
+          <label className="flex flex-col gap-1.5 sm:col-span-2">
+            <span className="label-eyebrow">Date range *</span>
+            <DateRangeField
+              from={dateFrom}
+              to={dateTo}
+              onChange={(from, to) => setRange(from || todayISO(), to || from || todayISO())}
+            />
+          </label>
+          {hideOperator ? null : (
+            <label className="flex flex-col gap-1.5">
+              <span className="label-eyebrow">Operator</span>
+              <ReferenceSelect kind="operator" value={operatorId} onChange={setOperatorId} />
+            </label>
+          )}
+          {hidePartner ? null : (
+            <label className="flex flex-col gap-1.5">
+              <span className="label-eyebrow">Partner</span>
+              <ReferenceSelect kind="partner" value={partnerId} onChange={setPartnerId} />
+            </label>
+          )}
+          <label className="flex flex-col gap-1.5">
+            <span className="label-eyebrow">Game</span>
+            <ReferenceSelect
+              kind="game"
+              value={gameId}
+              operatorId={operatorId}
+              onChange={setGameId}
+            />
+          </label>
+        </div>
+
+        <div className="flex flex-wrap items-center gap-1.5">
+          {[
+            { label: "Today", from: todayISO(), to: todayISO() },
+            { label: "Yesterday", from: todayISO(-1), to: todayISO(-1) },
+            { label: "7d", from: todayISO(-6), to: todayISO() },
+            { label: "30d", from: todayISO(-29), to: todayISO() },
+            { label: "90d", from: todayISO(-89), to: todayISO() },
+          ].map((preset) => {
+            const active = dateFrom === preset.from && dateTo === preset.to;
+            return (
+              <button
+                key={preset.label}
+                onClick={() => setRange(preset.from, preset.to)}
+                className={`h-9 rounded-md border px-3 text-xs transition-colors ${
+                  active
+                    ? "border-primary/60 bg-primary/10 text-primary"
+                    : "border-border text-muted-foreground hover:text-foreground"
+                }`}
+              >
+                {preset.label}
+              </button>
+            );
+          })}
+          <button
+            onClick={() => {
+              setRange(todayISO(), todayISO());
+              setOperatorId("");
+              setPartnerId("");
+              setGameId("");
+            }}
+            className="ml-auto h-9 rounded-md border border-border px-3 text-xs text-muted-foreground transition-colors hover:text-foreground"
+          >
+            Reset filters
+          </button>
+        </div>
+      </div>
+
+      {summaryError ? (
+        <p className="panel mb-5 border-destructive/40 px-4 py-3 text-sm text-destructive">
+          Summary request failed: {summaryError}
+        </p>
+      ) : null}
+
+      <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-3">
+        {METRIC_CARDS.map((card) => {
+          const value = findMetric(summary.data ?? null, card.key);
+          return (
+            <StatCard
+              key={card.key}
+              label={card.label}
+              icon={card.icon}
+              tone={card.tone}
+              loading={summary.isLoading}
+              value={value === null ? "—" : formatStatValue(value)}
+              hint={humanizeKey(card.key)}
+            />
+          );
+        })}
+      </div>
+
+      <StatsExplorer />
+    </DashboardShell>
   );
 }

@@ -20,6 +20,7 @@ import { Route as ExchangeRatesRouteImport } from './routes/exchange-rates'
 import { Route as ForgotPasswordRouteImport } from './routes/forgot-password'
 import { Route as FreebetsRouteImport } from './routes/freebets'
 import { Route as GamesRouteImport } from './routes/games'
+import { Route as GamesCatalogRouteImport } from './routes/games-catalog'
 import { Route as IntegrationTestsRouteImport } from './routes/integration-tests'
 import { Route as InvoicesRouteImport } from './routes/invoices'
 import { Route as LoginRouteImport } from './routes/login'
@@ -92,6 +93,11 @@ const FreebetsRoute = FreebetsRouteImport.update({
 const GamesRoute = GamesRouteImport.update({
   id: '/games',
   path: '/games',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const GamesCatalogRoute = GamesCatalogRouteImport.update({
+  id: '/games-catalog',
+  path: '/games-catalog',
   getParentRoute: () => rootRouteImport,
 } as any)
 const IntegrationTestsRoute = IntegrationTestsRouteImport.update({
@@ -197,6 +203,7 @@ export interface FileRoutesByFullPath {
   '/forgot-password': typeof ForgotPasswordRoute
   '/freebets': typeof FreebetsRoute
   '/games': typeof GamesRoute
+  '/games-catalog': typeof GamesCatalogRoute
   '/integration-tests': typeof IntegrationTestsRoute
   '/invoices': typeof InvoicesRoute
   '/login': typeof LoginRoute
@@ -228,6 +235,7 @@ export interface FileRoutesByTo {
   '/forgot-password': typeof ForgotPasswordRoute
   '/freebets': typeof FreebetsRoute
   '/games': typeof GamesRoute
+  '/games-catalog': typeof GamesCatalogRoute
   '/integration-tests': typeof IntegrationTestsRoute
   '/invoices': typeof InvoicesRoute
   '/login': typeof LoginRoute
@@ -260,6 +268,7 @@ export interface FileRoutesById {
   '/forgot-password': typeof ForgotPasswordRoute
   '/freebets': typeof FreebetsRoute
   '/games': typeof GamesRoute
+  '/games-catalog': typeof GamesCatalogRoute
   '/integration-tests': typeof IntegrationTestsRoute
   '/invoices': typeof InvoicesRoute
   '/login': typeof LoginRoute
@@ -293,6 +302,7 @@ export interface FileRouteTypes {
     | '/forgot-password'
     | '/freebets'
     | '/games'
+    | '/games-catalog'
     | '/integration-tests'
     | '/invoices'
     | '/login'
@@ -324,6 +334,7 @@ export interface FileRouteTypes {
     | '/forgot-password'
     | '/freebets'
     | '/games'
+    | '/games-catalog'
     | '/integration-tests'
     | '/invoices'
     | '/login'
@@ -355,6 +366,7 @@ export interface FileRouteTypes {
     | '/forgot-password'
     | '/freebets'
     | '/games'
+    | '/games-catalog'
     | '/integration-tests'
     | '/invoices'
     | '/login'
@@ -387,6 +399,7 @@ export interface RootRouteChildren {
   ForgotPasswordRoute: typeof ForgotPasswordRoute
   FreebetsRoute: typeof FreebetsRoute
   GamesRoute: typeof GamesRoute
+  GamesCatalogRoute: typeof GamesCatalogRoute
   IntegrationTestsRoute: typeof IntegrationTestsRoute
   InvoicesRoute: typeof InvoicesRoute
   LoginRoute: typeof LoginRoute
@@ -484,6 +497,13 @@ declare module '@tanstack/react-router' {
       path: '/games'
       fullPath: '/games'
       preLoaderRoute: typeof GamesRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/games-catalog': {
+      id: '/games-catalog'
+      path: '/games-catalog'
+      fullPath: '/games-catalog'
+      preLoaderRoute: typeof GamesCatalogRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/integration-tests': {
@@ -627,6 +647,7 @@ const rootRouteChildren: RootRouteChildren = {
   ForgotPasswordRoute: ForgotPasswordRoute,
   FreebetsRoute: FreebetsRoute,
   GamesRoute: GamesRoute,
+  GamesCatalogRoute: GamesCatalogRoute,
   IntegrationTestsRoute: IntegrationTestsRoute,
   InvoicesRoute: InvoicesRoute,
   LoginRoute: LoginRoute,

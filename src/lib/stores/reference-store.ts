@@ -68,7 +68,7 @@ const CONFIG: Record<
   { path: string; perPage: number; labels: string[] }
 > = {
   operator: { path: "/api/v1/clients", perPage: 200, labels: ["name", "client_name", "email"] },
-  game: { path: "/api/v1/operator-games", perPage: 1000, labels: ["game_name", "name"] },
+  game: { path: "/api/v1/operator-games", perPage: 100000, labels: ["game_name", "name"] },
   permission: { path: "/api/v1/permissions", perPage: 500, labels: ["name", "slug"] },
   role: { path: "/api/v1/roles", perPage: 200, labels: ["name", "role_name", "slug"] },
   partner: { path: "/api/v1/partners", perPage: 200, labels: ["name", "partner_name"] },

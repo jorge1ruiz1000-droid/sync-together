@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { Search, ChevronDown } from "lucide-react";
 import { useReferenceStore, type Kind } from "@/lib/stores/reference-store";
-import { clientScope, useAuth } from "@/lib/use-auth";
+import { clientScope, useAuth, userClients } from "@/lib/use-auth";
 import { cn } from "@/lib/utils";
 
 export type Option = { value: string; label: string };
@@ -135,14 +135,18 @@ export function ReferenceSelect({
     if (!open) setSearch("");
   }, [open]);
 
+  // Single-client admins are resolved from the session, so the games list must
+  // be fetched without operator_id. Only multi-client accounts send it.
+  const multiClient = userClients(user).length > 1 || scope.ids.length > 1;
+
   useEffect(() => {
     if (kind !== "game" || disabled) return;
-    if (operatorId) {
+    if (operatorId && multiClient) {
       void ensureGamesForOperator(operatorId);
     } else {
       void ensureGlobal("game");
     }
-  }, [kind, operatorId, disabled, ensureGamesForOperator, ensureGlobal]);
+  }, [kind, operatorId, disabled, multiClient, ensureGamesForOperator, ensureGlobal]);
 
   useEffect(() => {
     const handleClickOutside = (event: MouseEvent) => {

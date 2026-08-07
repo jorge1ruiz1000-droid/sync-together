@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { Search, ChevronDown } from "lucide-react";
 import { useReferenceStore, type Kind } from "@/lib/stores/reference-store";
-import { clientScope, useAuth } from "@/lib/use-auth";
+import { clientScope, useAuth, userClients } from "@/lib/use-auth";
 import { cn } from "@/lib/utils";
 
 export type Option = { value: string; label: string };

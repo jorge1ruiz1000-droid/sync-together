@@ -45,17 +45,20 @@ function cardTitle(type: StatsTopType, metric: StatsMetric): string {
 export function StatsExplorer() {
   const { dateFrom, dateTo, operatorId, partnerId, gameId } = useDashboardStore();
   const { user } = useAuth();
-  const hidePartner = useClientScope(user).clientAdmin;
+  const clientScope = useClientScope(user);
+  const hidePartner = clientScope.clientAdmin;
   const [metrics, setMetrics] = useState<Partial<Record<StatsTopType, StatsMetric>>>({});
   const [variants, setVariants] = useState<Partial<Record<StatsTopType, ChartVariant>>>({});
 
-  const operatorIdNum = parseOperatorId(operatorId);
+  // Single-client admins never send operator_id — the API scopes to their operator.
+  const operatorIdNum = clientScope.singleClient ? undefined : parseOperatorId(operatorId);
   const partnerIdNum = hidePartner ? undefined : parseOperatorId(partnerId);
   const gameIdNum = parseOperatorId(gameId);
 
   // A single selected operator can't be compared against clients/partners/other operators,
   // so that scope gets a reduced set of day/month/game breakdowns.
-  const scope: ExplorerScope = operatorIdNum ? "operator" : "all";
+  const scope: ExplorerScope = operatorIdNum || clientScope.singleClient ? "operator" : "all";
+
   // Partner breakdowns are platform-wide — hidden from client admins.
   const types = TYPES_BY_SCOPE[scope].filter((type) => !(hidePartner && type === "partners"));
 

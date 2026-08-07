@@ -164,7 +164,7 @@ function IntegrationTests() {
   });
 
   const downloadResponses = async () => {
-    if (!filterOperatorId) return;
+    if (!filterOperatorId && !scope.singleClient) return;
     setDownloading(true);
     try {
       const list = await apiRequest("/api/v1/integration-tests", {

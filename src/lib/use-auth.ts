@@ -212,10 +212,12 @@ export function useClientScope(user: Dict | null): GlobalClientScope {
     mode: resolved ? "single" : base.mode,
     operatorId: resolved,
     clients: multi ? clients : [],
+    singleClient: !multi && (base.clientAdmin || clients.length === 1),
     activeClientId: resolved,
     setActiveClientId: setActive,
   };
 }
+
 
 /**
  * Strict account-type gate for endpoints the API restricts to a role

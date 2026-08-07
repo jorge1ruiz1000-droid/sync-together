@@ -194,16 +194,18 @@ export function useClientScope(user: Dict | null): GlobalClientScope {
   const clients = useMemo(() => userClients(user), [user]);
 
   const multi = clients.length > 1;
-  const resolved = multi
-    ? clients.some((c) => c.id === activeClientId)
-      ? activeClientId
-      : clients[0].id
-    : base.operatorId ?? (clients.length === 1 ? clients[0].id : null);
+  const resolved: string | null = multi
+    ? (clients.some((c) => c.id === activeClientId) ? activeClientId : clients[0]?.id ?? null)
+    : base.operatorId ?? (clients.length === 1 ? clients[0]?.id ?? null : null);
 
   useEffect(() => {
-    if (multi && activeClientId !== resolved) setActive(resolved);
-    if (!multi && activeClientId) setActive(null);
-  }, [multi, activeClientId, resolved, setActive]);
+    const next = multi ? resolved ?? null : null;
+    // Compare against the live store value so concurrent hook instances don't
+    // ping-pong updates and trigger "Maximum update depth exceeded".
+    const current = useActiveClientStore.getState().activeClientId ?? null;
+    if (current !== next) setActive(next);
+  }, [multi, resolved, setActive]);
+
 
   return {
     ...base,

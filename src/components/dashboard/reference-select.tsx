@@ -128,7 +128,6 @@ export function ReferenceSelect({
   }, [query.rows, kind, scope.clientAdmin, scopeKey]);
   const ensureGamesForOperator = useReferenceStore((s) => s.ensureGamesForOperator);
   const ensureGlobal = useReferenceStore((s) => s.ensure);
-  const [open, setOpen] = useState(false);
   const [search, setSearch] = useState("");
   const ref = useRef<HTMLDivElement | null>(null);
 
@@ -141,13 +140,15 @@ export function ReferenceSelect({
   const multiClient = userClients(user).length > 1 || scope.ids.length > 1;
 
   useEffect(() => {
-    if (kind !== "game" || disabled) return;
+    if (kind !== "game" || disabled || !shouldLoad) return;
     if (operatorId && multiClient) {
       void ensureGamesForOperator(operatorId);
     } else {
       void ensureGlobal("game");
     }
-  }, [kind, operatorId, disabled, multiClient, ensureGamesForOperator, ensureGlobal]);
+  }, [kind, operatorId, disabled, multiClient, shouldLoad, ensureGamesForOperator, ensureGlobal]);
+
+
 
   useEffect(() => {
     const handleClickOutside = (event: MouseEvent) => {

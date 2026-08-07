@@ -226,11 +226,12 @@ export const RESOURCES: Record<string, ResourceDef> = {
     key: "operator-games",
     title: "Operator games",
     description:
-      "GET /api/v1/operator-games — per-operator game assignments. Operator ID required.",
+      "GET /api/v1/operator-games — per-operator game assignments.",
     path: "/api/v1/operator-games",
     paginated: true,
+    clientScoped: true,
     filters: [
-      { name: "operator_id", label: "Operator (required)", type: "operator", required: true },
+      { name: "operator_id", label: "Operator", type: "operator" },
       { name: "game_id", label: "Game", type: "game" },
       { name: "partner_id", label: "Partner name", type: "partner" },
       { name: "game_name", label: "Game name", type: "text" },

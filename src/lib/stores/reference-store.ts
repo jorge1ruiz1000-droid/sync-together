@@ -68,7 +68,7 @@ const CONFIG: Record<
   { path: string; perPage: number; labels: string[] }
 > = {
   operator: { path: "/api/v1/clients", perPage: 200, labels: ["name", "client_name", "email"] },
-  game: { path: "/api/v1/games", perPage: 100000, labels: ["name", "game_name"] },
+  game: { path: "/api/v1/operator-games", perPage: 1000, labels: ["game_name", "name"] },
   permission: { path: "/api/v1/permissions", perPage: 500, labels: ["name", "slug"] },
   role: { path: "/api/v1/roles", perPage: 200, labels: ["name", "role_name", "slug"] },
   partner: { path: "/api/v1/partners", perPage: 200, labels: ["name", "partner_name"] },
@@ -129,13 +129,14 @@ export const useReferenceStore = create<ReferenceStore>((set, get) => {
     return { value: String(id), label: candidate ? String(candidate) : `#${id}` } as Option;
   };
 
-  // Per-operator request for the game dropdown when an operator is selected.
+  // Game dropdown always reads /api/v1/operator-games; operator_id is optional
+  // and only sent when an operator is selected.
   const loadGamesForOperator = async (operatorId: string) => {
     const cfg = CONFIG.game;
     set((state) => ({ game: { ...state.game, loading: true, error: null } }) as Partial<ReferenceStore>);
     try {
-      const payload = await apiRequest("/api/v1/operator-games", {
-        query: { page: 1, per_page: cfg.perPage, operator_id: operatorId },
+      const payload = await apiRequest(cfg.path, {
+        query: { page: 1, per_page: cfg.perPage, operator_id: operatorId || undefined },
       });
       const rows = normalizeList(payload).rows;
 
@@ -153,7 +154,7 @@ export const useReferenceStore = create<ReferenceStore>((set, get) => {
 
       set(() => ({
         game: { options, rows, loading: false, error: null, loaded: true, promise: null },
-        gameScope: operatorId,
+        gameScope: operatorId || null,
       }) as Partial<ReferenceStore>);
     } catch (error) {
       set(() => ({
@@ -165,7 +166,7 @@ export const useReferenceStore = create<ReferenceStore>((set, get) => {
           loaded: false,
           promise: null,
         },
-        gameScope: operatorId,
+        gameScope: operatorId || null,
       }) as Partial<ReferenceStore>);
       throw error;
     }
@@ -180,16 +181,22 @@ export const useReferenceStore = create<ReferenceStore>((set, get) => {
     gameScope: null,
     ensure: (kind) => {
       const current = get()[kind];
-      if (kind === "game" && get().gameScope !== null) {
-        // list is currently scoped to an operator — reload the global catalogue
-        return load("game");
+      if (kind === "game") {
+        if (get().gameScope !== null) {
+          // list is currently scoped to an operator — reload the unscoped list
+          return loadGamesForOperator("");
+        }
+        if (current.loaded || current.loading) return current.promise ?? Promise.resolve();
+        const promise = loadGamesForOperator("");
+        set((state) => ({ game: { ...state.game, promise } }) as Partial<ReferenceStore>);
+        return promise;
       }
       if (current.loaded || current.loading) return current.promise ?? Promise.resolve();
       const promise = load(kind);
       set((state) => ({ [kind]: { ...state[kind], promise } }) as Partial<ReferenceStore>);
       return promise;
     },
-    refresh: (kind) => load(kind),
+    refresh: (kind) => (kind === "game" ? loadGamesForOperator("") : load(kind)),
     ensureGamesForOperator: async (operatorId: string) => {
       if (!operatorId) return;
       const state = get();

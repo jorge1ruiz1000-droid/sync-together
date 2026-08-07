@@ -24,27 +24,15 @@ const REFERENCE_COLUMNS: Record<string, Kind> = {
   permission_id: "permission",
 };
 
-function useReferenceLookups(rows: Dict[]) {
-  const ensure = useReferenceStore((s) => s.ensure);
+function useReferenceLookups(_rows: Dict[]) {
+  // Label lookups reuse reference lists that are already in the store (loaded
+  // on demand by the filter dropdowns). The table never fetches them itself —
+  // each page only calls the API it is actually about.
   const operator = useReferenceStore((s) => s.operator);
   const game = useReferenceStore((s) => s.game);
   const role = useReferenceStore((s) => s.role);
   const permission = useReferenceStore((s) => s.permission);
 
-  const neededKey = useMemo(() => {
-    if (rows.length === 0) return "";
-    const kinds = new Set<Kind>();
-    for (const col of Object.keys(rows[0])) {
-      const kind = REFERENCE_COLUMNS[col];
-      if (kind) kinds.add(kind);
-    }
-    return Array.from(kinds).sort().join(",");
-  }, [rows]);
-
-  useEffect(() => {
-    if (!neededKey) return;
-    for (const kind of neededKey.split(",") as Kind[]) void ensure(kind);
-  }, [neededKey, ensure]);
 
   return useMemo(() => {
     const maps: Partial<Record<Kind, Map<string, string>>> = {};

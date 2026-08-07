@@ -6,13 +6,14 @@ import { cn } from "@/lib/utils";
 
 export type Option = { value: string; label: string };
 
-export function useReferenceOptions(kind: Kind, disabled?: boolean, operatorId?: string) {
+export function useReferenceOptions(kind: Kind, disabled?: boolean, operatorId?: string, active = true) {
   const state = useReferenceStore((s) => s[kind]);
   const ensure = useReferenceStore((s) => s.ensure);
   useEffect(() => {
-    if (disabled || (kind === "game" && operatorId)) return;
+    // Lazy: reference lists are only fetched when the dropdown is actually used.
+    if (!active || disabled || (kind === "game" && operatorId)) return;
     void ensure(kind);
-  }, [kind, ensure, disabled, operatorId]);
+  }, [kind, ensure, disabled, operatorId, active]);
   return (
     state ?? {
       options: [],
@@ -114,7 +115,11 @@ export function ReferenceSelect({
   disabled?: boolean;
   groupBy?: string;
 }) {
-  const query = useReferenceOptions(kind, disabled, operatorId);
+  const [open, setOpen] = useState(false);
+  // Only fetch the reference list when the user opens the dropdown (or a value
+  // is already selected and needs a label) — never on page load.
+  const shouldLoad = open || Boolean(value);
+  const query = useReferenceOptions(kind, disabled, operatorId, shouldLoad);
   const { user } = useAuth();
   const scope = clientScope(user);
   const scopeKey = scope.ids.join(",");
@@ -127,7 +132,6 @@ export function ReferenceSelect({
   }, [query.rows, kind, scope.clientAdmin, scopeKey]);
   const ensureGamesForOperator = useReferenceStore((s) => s.ensureGamesForOperator);
   const ensureGlobal = useReferenceStore((s) => s.ensure);
-  const [open, setOpen] = useState(false);
   const [search, setSearch] = useState("");
   const ref = useRef<HTMLDivElement | null>(null);
 
@@ -140,13 +144,15 @@ export function ReferenceSelect({
   const multiClient = userClients(user).length > 1 || scope.ids.length > 1;
 
   useEffect(() => {
-    if (kind !== "game" || disabled) return;
+    if (kind !== "game" || disabled || !shouldLoad) return;
     if (operatorId && multiClient) {
       void ensureGamesForOperator(operatorId);
     } else {
       void ensureGlobal("game");
     }
-  }, [kind, operatorId, disabled, multiClient, ensureGamesForOperator, ensureGlobal]);
+  }, [kind, operatorId, disabled, multiClient, shouldLoad, ensureGamesForOperator, ensureGlobal]);
+
+
 
   useEffect(() => {
     const handleClickOutside = (event: MouseEvent) => {
@@ -310,10 +316,10 @@ export function MultiReferenceSelect({
   onChange: (value: string[]) => void;
   className?: string;
 }) {
-  const query = useReferenceOptions(kind);
+  const [open, setOpen] = useState(false);
+  const query = useReferenceOptions(kind, false, undefined, open || value.length > 0);
   const options = query.options;
   const selected = new Set(value);
-  const [open, setOpen] = useState(false);
   const [search, setSearch] = useState("");
   const ref = useRef<HTMLDivElement | null>(null);
 

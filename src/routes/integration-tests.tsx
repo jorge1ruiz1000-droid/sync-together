@@ -74,6 +74,8 @@ function IntegrationTests() {
   const { user } = useAuth();
   const scope = useClientScope(user);
   const hideOperator = scope.mode === "single";
+  // Single-client admins never send operator_id — the API resolves it from the session.
+  const filterOperatorParam = (value: string) => (scope.singleClient ? undefined : parseOperatorId(value));
   const operatorRef = useReferenceOptions("operator");
   const operatorOptions = operatorRef.options;
   const [operatorId, setOperatorId] = useState(scope.operatorId ?? "");
@@ -131,7 +133,7 @@ function IntegrationTests() {
       apiRequest("/api/v1/integration-tests", {
         query: {
           status: statusFilter || undefined,
-          operator_id: parseOperatorId(filterOperatorId),
+          operator_id: filterOperatorParam(filterOperatorId),
           page: 1,
           per_page: 15,
         },
@@ -168,7 +170,7 @@ function IntegrationTests() {
       const list = await apiRequest("/api/v1/integration-tests", {
         query: {
           status: statusFilter || undefined,
-          operator_id: parseOperatorId(filterOperatorId),
+          operator_id: filterOperatorParam(filterOperatorId),
           page: 1,
           per_page: 200,
         },

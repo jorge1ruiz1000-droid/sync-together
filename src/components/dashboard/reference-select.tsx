@@ -115,7 +115,11 @@ export function ReferenceSelect({
   disabled?: boolean;
   groupBy?: string;
 }) {
-  const query = useReferenceOptions(kind, disabled, operatorId);
+  const [open, setOpen] = useState(false);
+  // Only fetch the reference list when the user opens the dropdown (or a value
+  // is already selected and needs a label) — never on page load.
+  const shouldLoad = open || Boolean(value);
+  const query = useReferenceOptions(kind, disabled, operatorId, shouldLoad);
   const { user } = useAuth();
   const scope = clientScope(user);
   const scopeKey = scope.ids.join(",");

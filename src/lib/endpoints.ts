@@ -523,6 +523,12 @@ export const NAV: NavSection[] = [
   {
     label: "Catalogue",
     items: [
+      {
+        label: "Games catalogue",
+        to: "/games-catalog",
+        icon: "Gamepad2",
+        permission: "operator-games.view",
+      },
       { label: "Games", to: "/games", icon: "Gamepad2", adminOnly: true, permission: "games.view" },
       {
         label: "Operator games",

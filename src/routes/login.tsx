@@ -4,7 +4,7 @@ import { useEffect, useState } from "react";
 import { apiRequest, findObject, findString, tokenStore } from "@/lib/api";
 import { ApiErrorBox } from "@/components/dashboard/api-error";
 import { ThemeToggle } from "@/components/theme-toggle";
-import logoAsset from "@/assets/eurovirtuals-logo.png.asset.json";
+const LOGO_URL = "/eurovirtuals-logo.png";
 
 
 export const Route = createFileRoute("/login")({
@@ -144,7 +144,7 @@ function LoginPage() {
       <div className="relative w-full max-w-sm">
         <div className="mb-6 flex flex-col items-start gap-2">
           <img
-            src={logoAsset.url}
+            src={LOGO_URL}
             alt="EuroVirtuals — built to perform"
             className="h-12 w-auto max-w-full object-contain"
           />

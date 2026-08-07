@@ -1,0 +1,416 @@
+import { useEffect, useMemo, useRef, useState } from "react";
+import { Search, ChevronDown } from "lucide-react";
+import { useReferenceStore, type Kind } from "@/lib/stores/reference-store";
+import { clientScope, useAuth } from "@/lib/use-auth";
+import { cn } from "@/lib/utils";
+
+export type Option = { value: string; label: string };
+
+export function useReferenceOptions(kind: Kind, disabled?: boolean, operatorId?: string) {
+  const state = useReferenceStore((s) => s[kind]);
+  const ensure = useReferenceStore((s) => s.ensure);
+  useEffect(() => {
+    if (disabled || (kind === "game" && operatorId)) return;
+    void ensure(kind);
+  }, [kind, ensure, disabled, operatorId]);
+  return (
+    state ?? {
+      options: [],
+      rows: [],
+      loading: false,
+      error: null,
+      loaded: false,
+      promise: null,
+    }
+  );
+}
+
+function rowId(row: Record<string, unknown>, kind?: Kind) {
+  // operator-games rows carry their own `id`, but options are keyed by game_id
+  if (kind === "game" && row.game_id !== undefined && row.game_id !== null) return row.game_id;
+  return row.id ?? row.operator_id ?? row.game_id ?? row.permission_id ?? row.role_id;
+}
+
+function rowLabel(row: Record<string, unknown>, options: Option[], kind?: Kind) {
+  const id = rowId(row, kind);
+  const value = id === undefined || id === null ? "" : String(id);
+  return options.find((option) => option.value === value)?.label ?? `#${value}`;
+}
+
+function filterRows(
+  rows: Record<string, unknown>[],
+  options: Option[],
+  query: string,
+  groupBy?: string,
+  kind?: Kind,
+) {
+  const lowerQuery = query.trim().toLowerCase();
+  const matchedRows = rows.filter((row) => {
+    if (!lowerQuery) return true;
+    const label = rowLabel(row, options, kind).toLowerCase();
+    if (label.includes(lowerQuery)) return true;
+    if (groupBy) {
+      const groupValue = row[groupBy];
+      if (typeof groupValue === "string" && groupValue.toLowerCase().includes(lowerQuery)) return true;
+    }
+    return false;
+  });
+
+  if (!groupBy) {
+    const seen = new Set<string>();
+    const list: Option[] = [];
+    for (const row of matchedRows) {
+      const id = rowId(row, kind);
+      if (id === undefined || id === null) continue;
+      const value = String(id);
+      if (seen.has(value)) continue;
+      seen.add(value);
+      list.push({ value, label: rowLabel(row, options, kind) });
+    }
+    return list;
+  }
+
+  const groups = new Map<string, { label: string; options: Option[] }>();
+  for (const row of matchedRows) {
+    const id = rowId(row, kind);
+    if (id === undefined || id === null) continue;
+    const rawGroup = row[groupBy];
+    const fallbackGroup =
+      (groupBy !== "partner_name" && typeof row.partner_name === "string" && row.partner_name) ? row.partner_name : undefined;
+    const groupLabel =
+      typeof rawGroup === "string" && rawGroup
+        ? rawGroup
+        : typeof fallbackGroup === "string" && fallbackGroup
+          ? fallbackGroup
+          : typeof row.partner_id === "number" || typeof row.partner_id === "string"
+            ? String(row.partner_id)
+            : "Other";
+    const key = groupLabel || "Other";
+    const group = groups.get(key) ?? { label: key, options: [] };
+    group.options.push({ value: String(id), label: rowLabel(row, options, kind) });
+    groups.set(key, group);
+  }
+  return Array.from(groups.values());
+}
+
+export function ReferenceSelect({
+  kind,
+  id,
+  value,
+  onChange,
+  className,
+  required,
+  operatorId,
+  disabled,
+  groupBy,
+}: {
+  kind: Kind;
+  id?: string;
+  value: string;
+  onChange: (value: string) => void;
+  className?: string;
+  required?: boolean;
+  operatorId?: string;
+  disabled?: boolean;
+  groupBy?: string;
+}) {
+  const query = useReferenceOptions(kind, disabled, operatorId);
+  const { user } = useAuth();
+  const scope = clientScope(user);
+  const scopeKey = scope.ids.join(",");
+  // Client admins may only pick the operators assigned to their account.
+  const scopedRows = useMemo(() => {
+    if (kind !== "operator" || !scope.clientAdmin || scope.ids.length === 0) return query.rows;
+    const allowed = new Set(scopeKey.split(",").filter(Boolean));
+    return query.rows.filter((row) => allowed.has(String(row.id ?? row.operator_id ?? "")));
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [query.rows, kind, scope.clientAdmin, scopeKey]);
+  const ensureGamesForOperator = useReferenceStore((s) => s.ensureGamesForOperator);
+  const ensureGlobal = useReferenceStore((s) => s.ensure);
+  const [open, setOpen] = useState(false);
+  const [search, setSearch] = useState("");
+  const ref = useRef<HTMLDivElement | null>(null);
+
+  useEffect(() => {
+    if (!open) setSearch("");
+  }, [open]);
+
+  useEffect(() => {
+    if (kind !== "game" || disabled) return;
+    if (operatorId) {
+      void ensureGamesForOperator(operatorId);
+    } else {
+      void ensureGlobal("game");
+    }
+  }, [kind, operatorId, disabled, ensureGamesForOperator, ensureGlobal]);
+
+  useEffect(() => {
+    const handleClickOutside = (event: MouseEvent) => {
+      if (ref.current && !ref.current.contains(event.target as Node)) {
+        setOpen(false);
+      }
+    };
+    const handleKeyDown = (event: KeyboardEvent) => {
+      if (event.key === "Escape") setOpen(false);
+    };
+    document.addEventListener("mousedown", handleClickOutside);
+    document.addEventListener("keydown", handleKeyDown);
+    return () => {
+      document.removeEventListener("mousedown", handleClickOutside);
+      document.removeEventListener("keydown", handleKeyDown);
+    };
+  }, []);
+
+  const selected = query.options.find((option) => option.value === value);
+  const placeholder =
+    kind === "operator"
+      ? "Select operator"
+      : kind === "partner"
+      ? "Select partner group"
+      : kind === "game"
+      ? "Select a game"
+      : kind === "role"
+      ? "Select role"
+      : "Select permission";
+
+  const filtered = useMemo(
+    () => filterRows(scopedRows, query.options, search, groupBy, kind),
+    [scopedRows, query.options, search, groupBy, kind],
+  );
+  const options = useMemo(
+    () => (!groupBy ? (filtered as Option[]) : ([] as Option[])),
+    [filtered, groupBy],
+  );
+
+  const groups = useMemo(
+    () => (groupBy ? filtered as Array<{ label: string; options: Option[] }> : []),
+    [filtered, groupBy],
+  );
+
+  const selectedLabel = selected?.label ?? "";
+  const emptyMessage = query.loading ? "Loading…" : "No results found.";
+
+  return (
+    <div className={cn("relative flex flex-col gap-1", className)} ref={ref}>
+      <button
+        type="button"
+        id={id}
+        aria-haspopup="listbox"
+        aria-expanded={open}
+        aria-busy={query.loading}
+        aria-disabled={disabled || query.loading}
+        disabled={disabled || query.loading}
+        onClick={() => {
+          if (disabled || query.loading) return;
+          setOpen((current) => !current);
+        }}
+        className={cn(
+          "num flex h-9 w-full items-center justify-between rounded-md border bg-surface px-3 text-sm text-left outline-none transition-colors focus:border-primary/70 focus:ring-2 focus:ring-ring",
+          required && !value && "border-primary/40",
+          (disabled || query.loading) && "cursor-not-allowed opacity-60",
+        )}
+      >
+        <span className={cn("truncate", !selectedLabel && !query.loading && "text-muted-foreground")}>
+          {query.loading ? "Loading…" : selectedLabel || placeholder}
+        </span>
+        <ChevronDown className="h-4 w-4 opacity-70" />
+      </button>
+
+
+      {open ? (
+        <div className="absolute left-0 right-0 z-20 mt-1 rounded-md border border-input bg-surface shadow-xl">
+          <div className="flex items-center gap-2 border-b border-muted/20 px-2 py-2">
+            <Search className="h-4 w-4 text-muted-foreground" />
+            <input
+              autoFocus
+              value={search}
+              onChange={(event) => setSearch(event.target.value)}
+              placeholder={`Search ${placeholder.toLowerCase()}...`}
+              className="h-9 w-full rounded-md border border-input bg-transparent px-2 text-sm outline-none focus:border-primary/70 focus:ring-0"
+            />
+          </div>
+          <div className="max-h-64 overflow-y-auto px-1 py-1">
+            {query.loading ? (
+              <p className="px-3 py-2 text-sm text-muted-foreground">Loading…</p>
+            ) : groupBy ? (
+              groups.length === 0 ? (
+                <p className="px-3 py-2 text-sm text-muted-foreground">{emptyMessage}</p>
+              ) : (
+                groups.map((group) => (
+                  <div key={group.label} className="space-y-1 py-1">
+                    <div className="px-3 text-xs uppercase tracking-[0.12em] text-muted-foreground">{group.label}</div>
+                    <div className="space-y-1">
+                      {group.options.map((option) => (
+                        <button
+                          key={option.value}
+                          type="button"
+                          onClick={() => {
+                            onChange(option.value);
+                            setOpen(false);
+                          }}
+                          className={cn(
+                            "flex w-full items-center rounded-md px-3 py-2 text-left text-sm text-foreground transition-colors hover:bg-accent/50",
+                            value === option.value && "bg-primary/10",
+                          )}
+                        >
+                          {option.label}
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+                ))
+              )
+            ) : options.length === 0 ? (
+              <p className="px-3 py-2 text-sm text-muted-foreground">{emptyMessage}</p>
+            ) : (
+              options.map((option) => (
+                <button
+                  key={option.value}
+                  type="button"
+                  onClick={() => {
+                    onChange(option.value);
+                    setOpen(false);
+                  }}
+                  className={cn(
+                    "flex w-full items-center rounded-md px-3 py-2 text-left text-sm text-foreground transition-colors hover:bg-accent/50",
+                    value === option.value && "bg-primary/10",
+                  )}
+                >
+                  {option.label}
+                </button>
+              ))
+            )}
+          </div>
+        </div>
+      ) : null}
+
+      {query.error ? (
+        <p className="text-[11px] text-warning">
+          Could not load {kind} list — {query.error}
+        </p>
+      ) : null}
+    </div>
+  );
+}
+
+export function MultiReferenceSelect({
+  kind,
+  id,
+  value,
+  onChange,
+  className,
+}: {
+  kind: Kind;
+  id?: string;
+  value: string[];
+  onChange: (value: string[]) => void;
+  className?: string;
+}) {
+  const query = useReferenceOptions(kind);
+  const options = query.options;
+  const selected = new Set(value);
+  const [open, setOpen] = useState(false);
+  const [search, setSearch] = useState("");
+  const ref = useRef<HTMLDivElement | null>(null);
+
+  useEffect(() => {
+    if (!open) setSearch("");
+  }, [open]);
+
+  useEffect(() => {
+    const handleClickOutside = (event: MouseEvent) => {
+      if (ref.current && !ref.current.contains(event.target as Node)) setOpen(false);
+    };
+    const handleKeyDown = (event: KeyboardEvent) => {
+      if (event.key === "Escape") setOpen(false);
+    };
+    document.addEventListener("mousedown", handleClickOutside);
+    document.addEventListener("keydown", handleKeyDown);
+    return () => {
+      document.removeEventListener("mousedown", handleClickOutside);
+      document.removeEventListener("keydown", handleKeyDown);
+    };
+  }, []);
+
+  const toggle = (v: string) => {
+    const next = new Set(selected);
+    if (next.has(v)) next.delete(v);
+    else next.add(v);
+    onChange(Array.from(next));
+  };
+
+  const filtered = useMemo(() => {
+    const q = search.trim().toLowerCase();
+    if (!q) return options;
+    return options.filter((option) => option.label.toLowerCase().includes(q));
+  }, [options, search]);
+
+  const summary =
+    value.length === 0
+      ? `Select ${kind}s`
+      : value.length <= 2
+        ? options
+            .filter((option) => selected.has(option.value))
+            .map((option) => option.label)
+            .join(", ") || `${value.length} selected`
+        : `${value.length} selected`;
+
+  return (
+    <div className={cn("relative flex flex-col gap-1", className)} ref={ref} id={id}>
+      <button
+        type="button"
+        aria-haspopup="listbox"
+        aria-expanded={open}
+        disabled={query.loading}
+        onClick={() => setOpen((current) => !current)}
+        className={cn(
+          "num flex h-9 w-full items-center justify-between rounded-md border border-input bg-surface px-3 text-left text-sm outline-none transition-colors focus:border-primary/70 focus:ring-2 focus:ring-ring",
+          query.loading && "cursor-not-allowed opacity-60",
+        )}
+      >
+        <span className={cn("truncate", value.length === 0 && "text-muted-foreground")}>
+          {query.loading ? "Loading…" : summary}
+        </span>
+        <ChevronDown className="h-4 w-4 opacity-70" />
+      </button>
+
+      {open ? (
+        <div className="absolute left-0 right-0 top-full z-20 mt-1 rounded-md border border-input bg-surface shadow-xl">
+          <div className="flex items-center gap-2 border-b border-muted/20 px-2 py-2">
+            <Search className="h-4 w-4 text-muted-foreground" />
+            <input
+              autoFocus
+              value={search}
+              onChange={(event) => setSearch(event.target.value)}
+              placeholder="Search..."
+              className="h-9 w-full rounded-md border border-input bg-transparent px-2 text-sm outline-none focus:border-primary/70 focus:ring-0"
+            />
+          </div>
+          <div className="max-h-56 overflow-y-auto px-1 py-1">
+            {filtered.length === 0 ? (
+              <p className="px-3 py-2 text-sm text-muted-foreground">No results found.</p>
+            ) : (
+              filtered.map((option) => (
+                <label
+                  key={option.value}
+                  className="flex cursor-pointer items-center gap-2 rounded px-2.5 py-1.5 text-sm hover:bg-accent/50"
+                >
+                  <input
+                    type="checkbox"
+                    className="size-4 accent-[var(--color-primary)]"
+                    checked={selected.has(option.value)}
+                    onChange={() => toggle(option.value)}
+                  />
+                  <span className="truncate">{option.label}</span>
+                </label>
+              ))
+            )}
+          </div>
+        </div>
+      ) : null}
+      {query.error ? (
+        <p className="mt-1 text-[11px] text-warning">Could not load {kind} list — {query.error}</p>
+      ) : null}
+    </div>
+  );
+}

@@ -1,0 +1,231 @@
+import { create } from "zustand";
+import { apiRequest, normalizeList, type Dict } from "@/lib/api";
+
+export type Option = { value: string; label: string };
+
+export type Kind = "operator" | "game" | "permission" | "role" | "partner";
+
+type ListState = {
+  options: Option[];
+  rows: Dict[];
+  loading: boolean;
+  error: string | null;
+  loaded: boolean;
+  promise: Promise<void> | null;
+};
+
+const emptyList = (): ListState => ({
+  options: [],
+  rows: [],
+  loading: false,
+  error: null,
+  loaded: false,
+  promise: null,
+});
+
+function toOptions(rows: Dict[], labelKeys: string[], kind: Kind): Option[] {
+  return rows
+    .map((row) => {
+      const id = row.id ?? row.operator_id ?? row.game_id ?? row.permission_id ?? row.role_id;
+      if (id === undefined || id === null) return null;
+      const baseLabel = labelKeys
+        .map((key) => row[key])
+        .find((value) => typeof value === "string" && value);
+      let label = baseLabel ? String(baseLabel) : `#${id}`;
+
+      if (kind === "partner") {
+        const count =
+          typeof row.total_games === "number"
+            ? row.total_games
+            : typeof row.games_count === "number"
+            ? row.games_count
+            : typeof row.partner_games_count === "number"
+            ? row.partner_games_count
+            : typeof row.game_count === "number"
+            ? row.game_count
+            : typeof row.total_games === "string" && /^\d+$/.test(row.total_games)
+            ? Number(row.total_games)
+            : typeof row.games_count === "string" && /^\d+$/.test(row.games_count)
+            ? Number(row.games_count)
+            : typeof row.partner_games_count === "string" && /^\d+$/.test(row.partner_games_count)
+            ? Number(row.partner_games_count)
+            : typeof row.game_count === "string" && /^\d+$/.test(row.game_count)
+            ? Number(row.game_count)
+            : undefined;
+        if (typeof count === "number") {
+          label = `${label} (${count} game${count === 1 ? "" : "s"})`;
+        }
+      }
+
+      return { value: String(id), label };
+    })
+    .filter((option): option is Option => option !== null)
+    .sort((a, b) => a.label.localeCompare(b.label));
+}
+
+const CONFIG: Record<
+  Kind,
+  { path: string; perPage: number; labels: string[] }
+> = {
+  operator: { path: "/api/v1/clients", perPage: 200, labels: ["name", "client_name", "email"] },
+  game: { path: "/api/v1/games", perPage: 100000, labels: ["name", "game_name"] },
+  permission: { path: "/api/v1/permissions", perPage: 500, labels: ["name", "slug"] },
+  role: { path: "/api/v1/roles", perPage: 200, labels: ["name", "role_name", "slug"] },
+  partner: { path: "/api/v1/partners", perPage: 200, labels: ["name", "partner_name"] },
+};
+
+type ReferenceStore = {
+  operator: ListState;
+  game: ListState;
+  permission: ListState;
+  role: ListState;
+  partner: ListState;
+  gameScope: string | null;
+  ensure: (kind: Kind) => Promise<void>;
+  refresh: (kind: Kind) => Promise<void>;
+  ensureGamesForOperator: (operatorId: string) => Promise<void>;
+  refreshGamesForOperator: (operatorId: string) => Promise<void>;
+};
+
+export const useReferenceStore = create<ReferenceStore>((set, get) => {
+  const load = async (kind: Kind) => {
+    const cfg = CONFIG[kind];
+    set((state) => ({ [kind]: { ...state[kind], loading: true, error: null } }) as Partial<ReferenceStore>);
+    try {
+      const payload = await apiRequest(cfg.path, { query: { page: 1, per_page: cfg.perPage } });
+      const rows = normalizeList(payload).rows;
+      const options = toOptions(rows, cfg.labels, kind);
+      set(() => ({
+        [kind]: { options, rows, loading: false, error: null, loaded: true, promise: null },
+        ...(kind === "game" ? { gameScope: null } : {}),
+      }) as Partial<ReferenceStore>);
+    } catch (error) {
+      set(() => ({
+        [kind]: {
+          options: [],
+          rows: [],
+          loading: false,
+          error: error instanceof Error ? error.message : "Failed to load",
+          loaded: false,
+          promise: null,
+        },
+      }) as Partial<ReferenceStore>);
+    }
+  };
+
+  const gameLabel = (row: Dict, nameById: Map<string, string>) => {
+    const id = row.game_id ?? row.id;
+    if (id === undefined || id === null) return null;
+    const nested = (row.game ?? row.games) as Record<string, unknown> | undefined;
+    const candidate =
+      (typeof row.master_game_name === "string" && row.master_game_name) ||
+      (typeof row.game_name === "string" && row.game_name) ||
+      (typeof row.name === "string" && row.name) ||
+      (nested && typeof nested.name === "string" && nested.name) ||
+      nameById.get(String(id)) ||
+      (typeof row.partner_game_name === "string" && row.partner_game_name) ||
+      (typeof row.partner_game_id === "string" && row.partner_game_id) ||
+      "";
+    return { value: String(id), label: candidate ? String(candidate) : `#${id}` } as Option;
+  };
+
+  // Per-operator request for the game dropdown when an operator is selected.
+  const loadGamesForOperator = async (operatorId: string) => {
+    const cfg = CONFIG.game;
+    set((state) => ({ game: { ...state.game, loading: true, error: null } }) as Partial<ReferenceStore>);
+    try {
+      const payload = await apiRequest("/api/v1/operator-games", {
+        query: { page: 1, per_page: cfg.perPage, operator_id: operatorId },
+      });
+      const rows = normalizeList(payload).rows;
+
+      const nameById = new Map<string, string>();
+      for (const row of rows) {
+        const id = row.game_id ?? row.id;
+        const name = (typeof row.game_name === "string" && row.game_name) || (typeof row.name === "string" && row.name);
+        if (id !== undefined && id !== null && name) nameById.set(String(id), String(name));
+      }
+
+      const options = rows
+        .map((row) => gameLabel(row, nameById))
+        .filter((o): o is Option => o !== null)
+        .sort((a, b) => a.label.localeCompare(b.label));
+
+      set(() => ({
+        game: { options, rows, loading: false, error: null, loaded: true, promise: null },
+        gameScope: operatorId,
+      }) as Partial<ReferenceStore>);
+    } catch (error) {
+      set(() => ({
+        game: {
+          options: [],
+          rows: [],
+          loading: false,
+          error: error instanceof Error ? error.message : "Failed to load",
+          loaded: false,
+          promise: null,
+        },
+        gameScope: operatorId,
+      }) as Partial<ReferenceStore>);
+      throw error;
+    }
+  };
+
+  return {
+    operator: emptyList(),
+    game: emptyList(),
+    permission: emptyList(),
+    role: emptyList(),
+    partner: emptyList(),
+    gameScope: null,
+    ensure: (kind) => {
+      const current = get()[kind];
+      if (kind === "game" && get().gameScope !== null) {
+        // list is currently scoped to an operator — reload the global catalogue
+        return load("game");
+      }
+      if (current.loaded || current.loading) return current.promise ?? Promise.resolve();
+      const promise = load(kind);
+      set((state) => ({ [kind]: { ...state[kind], promise } }) as Partial<ReferenceStore>);
+      return promise;
+    },
+    refresh: (kind) => load(kind),
+    ensureGamesForOperator: async (operatorId: string) => {
+      if (!operatorId) return;
+      const state = get();
+      if (state.gameScope === operatorId && state.game.loaded) return;
+      await loadGamesForOperator(operatorId);
+    },
+    refreshGamesForOperator: (operatorId: string) => loadGamesForOperator(operatorId),
+  };
+});
+
+/**
+ * Parse currency codes from a client row's default_currency + currency_list.
+ * Supports strings ("KES,USD"), arrays, or JSON blobs.
+ */
+export function currenciesFromClient(row: Dict | undefined): string[] {
+  if (!row) return [];
+  const set = new Set<string>();
+  const push = (v: unknown) => {
+    if (typeof v === "string" && v.trim()) set.add(v.trim().toUpperCase());
+  };
+  push(row.default_currency);
+  const list = row.currency_list;
+  if (Array.isArray(list)) list.forEach(push);
+  else if (typeof list === "string") {
+    const trimmed = list.trim();
+    if (trimmed.startsWith("[")) {
+      try {
+        const parsed = JSON.parse(trimmed);
+        if (Array.isArray(parsed)) parsed.forEach(push);
+      } catch {
+        /* ignore */
+      }
+    } else {
+      trimmed.split(/[,\s]+/).forEach(push);
+    }
+  }
+  return Array.from(set);
+}
+

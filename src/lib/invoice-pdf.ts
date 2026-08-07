@@ -1,6 +1,5 @@
 import type { Dict } from "./api";
 import { formatCellValue, humanizeKey } from "./format";
-import logoAsset from "@/assets/eurovirtuals-logo.png.asset.json";
 
 const BRAND = {
   name: "Eurovirtuals",
@@ -36,23 +35,20 @@ function isExcludedKey(key: string) {
 }
 
 async function loadLogo(): Promise<string | null> {
-  for (const source of [logoAsset.url, "/evlogo.png"]) {
-    try {
-      const response = await fetch(source);
-      if (!response.ok) continue;
-      const blob = await response.blob();
-      const dataUrl = await new Promise<string>((resolve, reject) => {
-        const reader = new FileReader();
-        reader.onload = () => resolve(String(reader.result));
-        reader.onerror = reject;
-        reader.readAsDataURL(blob);
-      });
-      if (dataUrl) return dataUrl;
-    } catch {
-      /* try next source */
-    }
+  try {
+    const response = await fetch("/eurovirtuals-logo.png");
+    if (!response.ok) return null;
+    const blob = await response.blob();
+    const dataUrl = await new Promise<string>((resolve, reject) => {
+      const reader = new FileReader();
+      reader.onload = () => resolve(String(reader.result));
+      reader.onerror = reject;
+      reader.readAsDataURL(blob);
+    });
+    return dataUrl;
+  } catch {
+    return null;
   }
-  return null;
 }
 
 

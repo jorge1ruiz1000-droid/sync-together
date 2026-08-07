@@ -83,7 +83,9 @@ export function ResourceView({ resource }: { resource: ResourceDef }) {
 
 
   const hasOperatorFilter = (resource.filters ?? []).some((filter) => filter.name === "operator_id");
-  const lockOperator = scope.mode === "single" && !!scope.operatorId && hasOperatorFilter;
+  // Single-client admins never send operator_id — the API resolves it from the session.
+  const singleClient = scope.singleClient;
+  const lockOperator = !singleClient && scope.mode === "single" && !!scope.operatorId && hasOperatorFilter;
   // Single-client admins don't pick an operator — hide the input entirely.
   const hideOperator = scope.mode === "single";
   const hidePartner = scope.clientAdmin;
@@ -117,12 +119,14 @@ export function ResourceView({ resource }: { resource: ResourceDef }) {
 
   const query = useMemo(() => {
     const params: Record<string, QueryValue> = { ...applied };
+    if (singleClient) delete params.operator_id;
     if (resource.paginated) {
       params.page = page;
       params.per_page = perPage;
     }
     return params;
-  }, [applied, page, perPage, resource.paginated]);
+  }, [applied, page, perPage, resource.paginated, singleClient]);
+
 
   const request = useQuery({
     queryKey: [resource.key, query],

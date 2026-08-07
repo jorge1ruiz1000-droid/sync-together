@@ -172,9 +172,12 @@ export function userClients(user: Dict | null): ClientOption[] {
 export type GlobalClientScope = ClientScope & {
   /** Selectable clients for the global switcher (only when there is more than one). */
   clients: ClientOption[];
+  /** True when the account is tied to exactly one client — the API resolves it from the session. */
+  singleClient: boolean;
   activeClientId: string | null;
   setActiveClientId: (value: string) => void;
 };
+
 
 /**
  * Client scope that honours the globally selected client. Multi-client admins
@@ -209,10 +212,12 @@ export function useClientScope(user: Dict | null): GlobalClientScope {
     mode: resolved ? "single" : base.mode,
     operatorId: resolved,
     clients: multi ? clients : [],
+    singleClient: !multi && (base.clientAdmin || clients.length === 1),
     activeClientId: resolved,
     setActiveClientId: setActive,
   };
 }
+
 
 /**
  * Strict account-type gate for endpoints the API restricts to a role

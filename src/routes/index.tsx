@@ -72,7 +72,7 @@ function Overview() {
   } = useDashboardStore();
   const { user } = useAuth();
   const scope = useClientScope(user);
-  const lockOperator = scope.mode === "single" && !!scope.operatorId;
+  const lockOperator = !scope.singleClient && scope.mode === "single" && !!scope.operatorId;
   // Single-client admins never choose an operator — it comes from their account.
   const hideOperator = scope.mode === "single";
   // Partner grouping is platform-wide — hidden from client admins.
@@ -82,9 +82,11 @@ function Overview() {
     if (lockOperator && operatorId !== scope.operatorId) setOperatorId(scope.operatorId as string);
   }, [lockOperator, scope.operatorId, operatorId, setOperatorId]);
 
-  const operatorIdNum = parseOperatorId(operatorId);
+  // Single-client admins: the API resolves the operator from the session.
+  const operatorIdNum = scope.singleClient ? undefined : parseOperatorId(operatorId);
   const partnerIdNum = hidePartner ? undefined : parseOperatorId(partnerId);
   const gameIdNum = parseOperatorId(gameId);
+
 
   const summary = useQuery({
     queryKey: ["stats-summary", dateFrom, dateTo, operatorIdNum, partnerIdNum, gameIdNum],

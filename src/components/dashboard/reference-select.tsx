@@ -6,13 +6,14 @@ import { cn } from "@/lib/utils";
 
 export type Option = { value: string; label: string };
 
-export function useReferenceOptions(kind: Kind, disabled?: boolean, operatorId?: string) {
+export function useReferenceOptions(kind: Kind, disabled?: boolean, operatorId?: string, active = true) {
   const state = useReferenceStore((s) => s[kind]);
   const ensure = useReferenceStore((s) => s.ensure);
   useEffect(() => {
-    if (disabled || (kind === "game" && operatorId)) return;
+    // Lazy: reference lists are only fetched when the dropdown is actually used.
+    if (!active || disabled || (kind === "game" && operatorId)) return;
     void ensure(kind);
-  }, [kind, ensure, disabled, operatorId]);
+  }, [kind, ensure, disabled, operatorId, active]);
   return (
     state ?? {
       options: [],

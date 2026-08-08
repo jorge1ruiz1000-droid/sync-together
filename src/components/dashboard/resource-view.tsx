@@ -74,12 +74,9 @@ export function ResourceView({ resource }: { resource: ResourceDef }) {
   const rowActions = actionsFor(resource.key, "row").filter(
     (a) => roleAllowed(user, a.roles) && canAccess(user, a.permission),
   );
-  const collectionActions =
-    resource.key === "users"
-      ? actionsFor(resource.key, "collection").filter(
-          (a) => roleAllowed(user, a.roles) && canAccess(user, a.permission),
-        )
-      : [];
+  const collectionActions = actionsFor(resource.key, "collection").filter(
+    (a) => roleAllowed(user, a.roles) && canAccess(user, a.permission),
+  );
 
 
   const hasOperatorFilter = (resource.filters ?? []).some((filter) => filter.name === "operator_id");

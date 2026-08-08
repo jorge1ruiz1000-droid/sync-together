@@ -19,7 +19,10 @@ function filterNav(user: Dict | null, clientAdmin: boolean): NavSection[] {
   return NAV.map((section) => ({
     ...section,
     items: section.items.filter(
-      (item) => canAccess(user, item.permission) && !(clientAdmin && item.adminOnly),
+      (item) =>
+        canAccess(user, item.permission) &&
+        !(clientAdmin && item.adminOnly) &&
+        !(!clientAdmin && item.clientAdminOnly),
     ),
   })).filter((section) => section.items.length > 0);
 }

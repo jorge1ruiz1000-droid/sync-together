@@ -96,10 +96,11 @@ function GamesCatalogPage() {
   // operator from the session, multi-client accounts use the active client.
   const operatorId = scope.clientAdmin ? (scope.singleClient ? "" : scope.operatorId ?? "") : manualOperator;
   const needsOperator = !scope.clientAdmin && !manualOperator;
+  const allowed = scope.clientAdmin;
 
   const query = useQuery({
     queryKey: ["games-catalog", operatorId, scope.singleClient],
-    enabled: ready && Boolean(token) && !needsOperator,
+    enabled: ready && Boolean(token) && allowed && !needsOperator,
     queryFn: async () => {
       const payload = await apiRequest("/api/v1/operator-games", {
         query: { page: 1, per_page: 100000, operator_id: operatorId || undefined },
@@ -122,6 +123,16 @@ function GamesCatalogPage() {
         .includes(term),
     );
   }, [query.data, search]);
+
+  if (ready && token && !allowed) {
+    return (
+      <DashboardShell title="Games catalogue" subtitle="Client admin access only.">
+        <div className="rounded-lg border border-border bg-card p-6 text-sm text-muted-foreground">
+          This page is available to client admin accounts only.
+        </div>
+      </DashboardShell>
+    );
+  }
 
   return (
     <DashboardShell

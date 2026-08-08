@@ -464,6 +464,8 @@ export type NavItem = {
   permission?: string | string[];
   /** Hidden from CLIENT_ADMIN accounts (global/platform-wide surfaces). */
   adminOnly?: boolean;
+  /** Only visible to CLIENT_ADMIN accounts. */
+  clientAdminOnly?: boolean;
 };
 export type NavSection = { label: string; items: NavItem[] };
 
@@ -523,7 +525,7 @@ export const NAV: NavSection[] = [
   {
     label: "Catalogue",
     items: [
-      { label: "Games catalogue", to: "/games-catalog", icon: "Gamepad2" },
+      { label: "Games catalogue", to: "/games-catalog", icon: "Gamepad2", clientAdminOnly: true },
       { label: "Games", to: "/games", icon: "Gamepad2", adminOnly: true, permission: "games.view" },
       {
         label: "Operator games",

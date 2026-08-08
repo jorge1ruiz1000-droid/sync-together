@@ -124,6 +124,16 @@ function GamesCatalogPage() {
     );
   }, [query.data, search]);
 
+  if (ready && token && !allowed) {
+    return (
+      <DashboardShell title="Games catalogue" subtitle="Client admin access only.">
+        <div className="rounded-lg border border-border bg-card p-6 text-sm text-muted-foreground">
+          This page is available to client admin accounts only.
+        </div>
+      </DashboardShell>
+    );
+  }
+
   return (
     <DashboardShell
       title="Games catalogue"

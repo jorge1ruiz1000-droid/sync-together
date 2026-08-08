@@ -464,6 +464,8 @@ export type NavItem = {
   permission?: string | string[];
   /** Hidden from CLIENT_ADMIN accounts (global/platform-wide surfaces). */
   adminOnly?: boolean;
+  /** Only visible to CLIENT_ADMIN accounts. */
+  clientAdminOnly?: boolean;
 };
 export type NavSection = { label: string; items: NavItem[] };
 

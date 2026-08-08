@@ -1,10 +1,10 @@
 import { createFileRoute } from "@tanstack/react-router";
 import { useQuery } from "@tanstack/react-query";
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { DashboardShell } from "@/components/dashboard/dashboard-shell";
 import { ReferenceSelect } from "@/components/dashboard/reference-select";
 import { ApiErrorBox } from "@/components/dashboard/api-error";
-import { apiRequest, normalizeList, type Dict } from "@/lib/api";
+import { apiRequest, metaNumber, normalizeList, type Dict } from "@/lib/api";
 import { useAuth, useClientScope } from "@/lib/use-auth";
 import { cn } from "@/lib/utils";
 
@@ -90,7 +90,10 @@ function GamesCatalogPage() {
   const { user, ready, token } = useAuth();
   const scope = useClientScope(user);
   const [manualOperator, setManualOperator] = useState("");
-  const [search, setSearch] = useState("");
+  const [gameName, setGameName] = useState("");
+  const [appliedName, setAppliedName] = useState("");
+  const [page, setPage] = useState(1);
+  const [perPage, setPerPage] = useState(25);
 
   // Client admins are scoped automatically: single-client accounts resolve the
   // operator from the session, multi-client accounts use the active client.
@@ -98,31 +101,39 @@ function GamesCatalogPage() {
   const needsOperator = !scope.clientAdmin && !manualOperator;
   const allowed = scope.clientAdmin;
 
+  // Filters are reactive: changes debounce into the applied query, no Apply button.
+  useEffect(() => {
+    const timer = setTimeout(() => {
+      setAppliedName((prev) => {
+        if (prev === gameName) return prev;
+        setPage(1);
+        return gameName;
+      });
+    }, 350);
+    return () => clearTimeout(timer);
+  }, [gameName]);
+
+  const queryParams = useMemo(() => {
+    const params: Record<string, string | number> = { page, per_page: perPage };
+    if (operatorId) params.operator_id = operatorId;
+    if (appliedName.trim()) params.game_name = appliedName.trim();
+    return params;
+  }, [page, perPage, operatorId, appliedName]);
+
   const query = useQuery({
-    queryKey: ["games-catalog", operatorId, scope.singleClient],
+    queryKey: ["games-catalog", queryParams],
     enabled: ready && Boolean(token) && allowed && !needsOperator,
     queryFn: async () => {
-      const payload = await apiRequest("/api/v1/operator-games", {
-        query: { page: 1, per_page: 100000, operator_id: operatorId || undefined },
-      });
-      return normalizeList(payload).rows;
+      const payload = await apiRequest("/api/v1/operator-games", { query: queryParams });
+      return normalizeList(payload);
     },
+    retry: false,
   });
 
-  const rows = useMemo(() => {
-    const list = query.data ?? [];
-    const term = search.trim().toLowerCase();
-    if (!term) return list;
-    return list.filter((row) =>
-      [
-        str(row, ["game_name", "master_game_name", "name"]),
-        str(row, ["partner_name"]),
-      ]
-        .join(" ")
-        .toLowerCase()
-        .includes(term),
-    );
-  }, [query.data, search]);
+  const list = query.data ?? { rows: [], meta: null, raw: null };
+  const total = metaNumber(list.meta, ["total", "total_items", "count", "total_records"]);
+  const lastPage = metaNumber(list.meta, ["last_page", "total_pages", "pages"]);
+  const rows = list.rows;
 
   if (ready && token && !allowed) {
     return (
@@ -149,7 +160,10 @@ function GamesCatalogPage() {
               id="catalog-operator"
               kind="operator"
               value={manualOperator}
-              onChange={setManualOperator}
+              onChange={(value) => {
+                setManualOperator(value);
+                setPage(1);
+              }}
             />
           </div>
         ) : null}
@@ -159,14 +173,18 @@ function GamesCatalogPage() {
           </label>
           <input
             id="catalog-search"
-            value={search}
-            onChange={(e) => setSearch(e.target.value)}
-            placeholder="Game or partner name"
+            value={gameName}
+            onChange={(e) => setGameName(e.target.value)}
+            placeholder="Game name"
             className="h-9 w-full rounded-md border border-border bg-background px-3 text-sm outline-none focus:border-primary"
           />
         </div>
         {query.data ? (
-          <p className="num pb-2 text-xs text-muted-foreground">{rows.length} games</p>
+          <p className="num pb-2 text-xs text-muted-foreground">
+            Page {page}
+            {lastPage ? ` of ${lastPage}` : ""} · {rows.length} rows
+            {total !== null ? ` · ${total.toLocaleString("en-GB")} total` : ""}
+          </p>
         ) : null}
       </div>
 
@@ -187,11 +205,54 @@ function GamesCatalogPage() {
           No games found for this client.
         </p>
       ) : (
-        <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-5">
-          {rows.map((row, i) => (
-            <GameCard key={str(row, ["id", "game_id"]) || i} row={row} />
-          ))}
-        </div>
+        <>
+          <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-5">
+            {rows.map((row, i) => (
+              <GameCard key={str(row, ["id", "game_id"]) || i} row={row} />
+            ))}
+          </div>
+          <div className="mt-4 flex flex-wrap items-center justify-between gap-3">
+            <p className="num text-xs text-muted-foreground">
+              Page {page}
+              {lastPage ? ` of ${lastPage}` : ""} · {rows.length} rows
+              {total !== null ? ` · ${total.toLocaleString("en-GB")} total` : ""}
+            </p>
+            <div className="flex items-center gap-2">
+              <select
+                value={perPage}
+                onChange={(event) => {
+                  setPerPage(Number(event.target.value));
+                  setPage(1);
+                }}
+                className="num h-8 rounded-md border border-input bg-surface px-2 text-xs"
+              >
+                {[10, 25, 50, 100].map((size) => (
+                  <option key={size} value={size}>
+                    {size} / page
+                  </option>
+                ))}
+              </select>
+              <button
+                onClick={() => setPage((prev) => Math.max(1, prev - 1))}
+                disabled={page === 1 || query.isFetching}
+                className="h-8 rounded-md border border-border px-3 text-xs text-muted-foreground transition-colors hover:text-foreground disabled:opacity-40"
+              >
+                Previous
+              </button>
+              <button
+                onClick={() => setPage((prev) => prev + 1)}
+                disabled={
+                  query.isFetching ||
+                  rows.length === 0 ||
+                  (lastPage !== null && page >= lastPage)
+                }
+                className="h-8 rounded-md border border-border px-3 text-xs text-muted-foreground transition-colors hover:text-foreground disabled:opacity-40"
+              >
+                Next
+              </button>
+            </div>
+          </div>
+        </>
       )}
     </DashboardShell>
   );
